@@ -1,0 +1,39 @@
+name: Cleanup old screenshots
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Remove screenshots older than 15 minutes
+        run: |
+          CUTOFF=$(date -d '15 minutes ago' +%s)
+          changed=0
+          shopt -s nullglob
+          for f in *.png; do
+            commit_ts=$(git log -1 --format="%ct" -- "$f" 2>/dev/null || echo 0)
+            if [ "$commit_ts" -lt "$CUTOFF" ]; then
+              git rm -q "$f"
+              echo "Removed: $f (age: $(( ($(date +%s) - commit_ts) / 60 )) min)"
+              changed=1
+            fi
+          done
+          if [ "$changed" -eq 1 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "cleanup: remove screenshots older than 15 min"
+            git push
+          else
+            echo "Nothing to clean up"
+          fi
